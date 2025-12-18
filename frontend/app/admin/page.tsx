@@ -232,7 +232,7 @@ export default function AdminPanel() {
         onClick={handleNext}
         className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-6 rounded-2xl text-xl shadow-lg transform transition active:scale-95 mb-8"
       >
-        ✅ Call The Next Customer
+         Call The Next Customer
       </button>
 
       {/* List of People */}
