@@ -6,7 +6,7 @@ from typing import List
 
 app = FastAPI()
 
-# --- 1. CONFIGURATION ---
+# --- CONFIG ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 2. SERVICE MENU (Time in Minutes) ---
 MENU = {
     "Haircut": 20,
     "Shave": 10,
@@ -24,13 +23,12 @@ MENU = {
     "Facial": 30
 }
 
-# --- 3. DATA MODELS ---
+# --- MODELS ---
 class JoinRequest(BaseModel):
     name: str
     phone: str
     services: List[str]
 
-    # VALIDATOR: Strict 10-digit check
     @validator('phone')
     def validate_phone(cls, v):
         if not v.isdigit() or len(v) != 10:
@@ -41,20 +39,25 @@ class AddServiceRequest(BaseModel):
     token: int
     new_services: List[str]
 
-# --- 4. DATABASE ---
+# --- DATABASE ---
 queue_db = []
 history_db = []
 current_token = 100
 
-# --- 5. HELPER ---
+# --- HELPERS ---
 def get_total_wait_time():
     return sum(c['total_duration'] for c in queue_db)
 
-# --- 6. ENDPOINTS ---
+def get_daily_stats():
+    return {
+        "served": len(history_db), 
+        "minutes": sum(c['total_duration'] for c in history_db)
+    }
+
+# --- ENDPOINTS ---
 
 @app.get("/")
-def home():
-    return {"status": "Online", "mode": "Advanced UI"}
+def home(): return {"status": "Online"}
 
 @app.get("/queue/status")
 def get_status():
@@ -63,37 +66,47 @@ def get_status():
         "people_ahead": len(queue_db),
         "total_wait_minutes": get_total_wait_time(),
         "queue": queue_db,
-        "history": history_db[-3:]
+        "daily_stats": get_daily_stats()
     }
 
 @app.post("/queue/join")
 def join_queue(req: JoinRequest):
     global current_token
-    current_token += 1
+    # Filter duplicates just in case
+    unique_services = list(set(req.services))
     
-    # Calculate duration based on selected services
-    duration = sum(MENU.get(s, 0) for s in req.services)
+    current_token += 1
+    duration = sum(MENU.get(s, 0) for s in unique_services)
     
     new_customer = {
         "token": current_token,
         "name": req.name,
         "phone": req.phone,
-        "services": req.services,
+        "services": unique_services,
         "total_duration": duration,
         "status": "waiting",
         "joined_at": datetime.now().strftime("%I:%M %p")
     }
-    
     queue_db.append(new_customer)
-    return {"message": "Joined", "token": current_token, "data": new_customer}
+    return {"message": "Joined", "token": current_token}
 
 @app.post("/queue/add-service")
 def add_service(req: AddServiceRequest):
     for customer in queue_db:
         if customer['token'] == req.token:
-            customer['services'].extend(req.new_services)
-            customer['total_duration'] += sum(MENU.get(s, 0) for s in req.new_services)
-            return {"message": "Updated", "new_time": customer['total_duration']}
+            # LOGIC: Only add services that are NOT already in the list
+            added_services = []
+            for s in req.new_services:
+                if s not in customer['services']:
+                    customer['services'].append(s)
+                    customer['total_duration'] += MENU.get(s, 0)
+                    added_services.append(s)
+            
+            if not added_services:
+                return {"message": "No new services added (duplicates ignored)"}
+                
+            return {"message": "Updated", "added": added_services}
+            
     raise HTTPException(status_code=404, detail="Token not found")
 
 @app.post("/queue/next")
@@ -110,4 +123,4 @@ def reset_system():
     queue_db = []
     history_db = []
     current_token = 100
-    return {"message": "System Reset"}
+    return {"message": "Reset Done"}

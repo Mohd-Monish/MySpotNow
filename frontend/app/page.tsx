@@ -12,13 +12,11 @@ const SERVICES = [
 ];
 
 export default function Home() {
-  // State
   const [data, setData] = useState<any>(null);
   const [myToken, setMyToken] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0); 
   
-  // REFS (For Smart Timer Logic)
-  // We store the list of token IDs to detect if the queue actually changed
+  // REFS
   const lastQueueTokens = useRef<string>("");
 
   // Form State
@@ -37,7 +35,6 @@ export default function Home() {
     fetchStatus();
     const poller = setInterval(fetchStatus, 3000);
     
-    // Smooth Countdown (Decrements every second)
     const timer = setInterval(() => {
         setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
@@ -51,14 +48,35 @@ export default function Home() {
       const json = await res.json();
       setData(json);
       
-      // --- SMART TIMER FIX ---
-      // Create a "fingerprint" of the current queue (e.g., "101,102,103")
+      // --- ADVANCED TIMER LOGIC ---
+      // 1. Generate a unique ID for the current queue state
       const currentTokens = json.queue.map((q: any) => q.token).join(",");
 
-      // Only reset the timer if the queue has CHANGED (someone joined/left)
+      // 2. Check if the queue has physically changed (new person joined/left)
       if (lastQueueTokens.current !== currentTokens) {
-          setTimeLeft(json.total_wait_minutes * 60);
-          lastQueueTokens.current = currentTokens; // Update our record
+          // QUEUE CHANGED: Reset timer based on new server time
+          const newSeconds = json.total_wait_minutes * 60;
+          setTimeLeft(newSeconds);
+          
+          // Save the "Target Finish Time" to storage for refreshes
+          const finishTime = Date.now() + (newSeconds * 1000);
+          localStorage.setItem('slotSync_finishTime', finishTime.toString());
+          localStorage.setItem('slotSync_queueHash', currentTokens);
+          
+          lastQueueTokens.current = currentTokens;
+      } else {
+          // QUEUE SAME: Check if we just refreshed the page
+          const savedFinishTime = localStorage.getItem('slotSync_finishTime');
+          const savedHash = localStorage.getItem('slotSync_queueHash');
+
+          // If we have a saved timer for THIS exact queue state, recover it
+          if (savedFinishTime && savedHash === currentTokens) {
+              const remaining = Math.floor((parseInt(savedFinishTime) - Date.now()) / 1000);
+              // Only sync if the difference is huge (fixing the drift)
+              if (Math.abs(timeLeft - remaining) > 2) {
+                  setTimeLeft(remaining > 0 ? remaining : 0);
+              }
+          }
       }
       
     } catch (e) { console.error("API Error"); }
@@ -67,9 +85,7 @@ export default function Home() {
   // --- 2. HANDLERS ---
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (value === '' || /^\d+$/.test(value)) {
-      setPhone(value);
-    }
+    if (value === '' || /^\d+$/.test(value)) setPhone(value);
   };
 
   const toggleService = (svc: string) => {
@@ -78,7 +94,7 @@ export default function Home() {
   };
 
   const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault(); // Stop form reload
+    e.preventDefault();
     if (phone.length !== 10) return alert("Phone must be exactly 10 digits");
     if (selected.length === 0) return alert("Select at least one service");
     
@@ -103,9 +119,8 @@ export default function Home() {
     setLoading(false);
   };
 
-  // --- FIXED ADD SERVICE HANDLER ---
   const handleAddMore = async (e: React.FormEvent) => {
-    e.preventDefault(); // <--- CRITICAL FIX: Stops the page/modal reload
+    e.preventDefault();
     if (selected.length === 0) return;
     
     setLoading(true);
@@ -115,14 +130,14 @@ export default function Home() {
         body: JSON.stringify({ token: myToken, new_services: selected }),
     });
     
-    // Close modal cleanly without alert
     setIsAddingMore(false);
     setSelected([]);
     setLoading(false);
-    
-    // Force a data refresh to update time immediately
     fetchStatus(); 
   };
+
+  // Helper to check if I already own a service
+  const myCurrentServices = data?.queue.find((q:any) => q.token === myToken)?.services || [];
 
   // --- 3. UI HELPERS ---
   const formatTime = (s: number) => {
@@ -136,7 +151,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-neutral-950 p-6 flex flex-col items-center font-sans text-gray-200">
       
-      {/* --- STATUS CARD --- */}
+      {/* STATUS CARD */}
       <div className="w-full max-w-md bg-neutral-900/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 mb-8 relative">
         <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 shadow-[0_0_15px_rgba(74,222,128,0.5)]"></div>
         
@@ -163,7 +178,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* --- DYNAMIC ACTION AREA --- */}
+        {/* ACTION AREA */}
         <div className="bg-neutral-800/50 p-6 border-t border-white/5">
            {amIInQueue ? (
               <div className="text-center animate-in zoom-in duration-300">
@@ -189,7 +204,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* --- QUEUE LIST --- */}
+      {/* QUEUE LIST */}
       <div className="w-full max-w-md space-y-3">
          <h3 className="text-[10px] font-bold text-gray-600 uppercase tracking-widest pl-2">Current List</h3>
          {data?.queue.map((p:any, i:number) => {
@@ -221,7 +236,7 @@ export default function Home() {
          })}
       </div>
 
-      {/* --- MODAL (JOIN & ADD) --- */}
+      {/* MODAL */}
       {(showModal || isAddingMore) && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
            <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in duration-200">
@@ -237,28 +252,37 @@ export default function Home() {
                             placeholder="Your Name" value={name} onChange={e=>setName(e.target.value)} />
                         
                         <input 
-                            type="tel" 
-                            maxLength={10}
+                            type="tel" maxLength={10}
                             className="w-full p-4 bg-neutral-950 border border-white/10 rounded-xl font-medium text-white focus:border-green-500 outline-none" 
-                            placeholder="Phone (10 digits)" 
-                            value={phone} 
-                            onChange={handlePhoneChange} 
+                            placeholder="Phone (10 digits)" value={phone} onChange={handlePhoneChange} 
                         />
                      </>
                  )}
 
                  <div className="grid grid-cols-2 gap-2">
-                    {SERVICES.map(s => (
-                        <button key={s.name} type="button" onClick={() => toggleService(s.name)}
-                            className={`p-3 rounded-xl text-sm font-bold border transition-all 
-                                ${selected.includes(s.name) 
-                                    ? 'bg-green-500 text-black border-green-500' 
-                                    : 'bg-neutral-800 text-gray-400 border-white/5 hover:border-white/20'}
-                            `}
-                        >
-                            {s.name} <span className="block text-[10px] opacity-60 font-normal">{s.time}m</span>
-                        </button>
-                    ))}
+                    {SERVICES.map(s => {
+                        // Check if I already have this service (only for Add More mode)
+                        const alreadyOwned = isAddingMore && myCurrentServices.includes(s.name);
+                        
+                        return (
+                            <button 
+                                key={s.name} 
+                                type="button" 
+                                disabled={alreadyOwned} // DISABLE IF OWNED
+                                onClick={() => toggleService(s.name)}
+                                className={`p-3 rounded-xl text-sm font-bold border transition-all 
+                                    ${alreadyOwned 
+                                        ? 'bg-neutral-900 text-gray-700 border-transparent opacity-50 cursor-not-allowed' // Disabled Style
+                                        : selected.includes(s.name) 
+                                            ? 'bg-green-500 text-black border-green-500' 
+                                            : 'bg-neutral-800 text-gray-400 border-white/5 hover:border-white/20'}
+                                `}
+                            >
+                                {s.name} 
+                                {alreadyOwned ? <span className="block text-[10px]">Purchased</span> : <span className="block text-[10px] opacity-60 font-normal">{s.time}m</span>}
+                            </button>
+                        )
+                    })}
                  </div>
 
                  <button onClick={isAddingMore ? handleAddMore : handleJoin} disabled={loading}
