@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 
 // --- CONFIG ---
-const API_URL = "http://127.0.0.1:8000"; 
+const API_URL = "https://myspotnow-api.onrender.com";
 
 const SERVICES = [
   { name: "Haircut", time: 20 },

@@ -24,8 +24,8 @@ MENU = {
 
 # --- SECURITY & DB CONNECTION ---
 # Your MongoDB Connection String
-MONGO_URI = "mongodb+srv://mrmonish1122_db_user:e6cbLGZyWGv3qrqu@slotsync-startup.xalblqt.mongodb.net/?appName=SlotSync-Startup"
-
+# NEW (Secure)
+MONGO_URI = os.getenv("MONGO_URI")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 try:
