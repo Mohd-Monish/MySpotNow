@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // --- CONFIG ---
 const API_URL = "https://myspotnow-api.onrender.com"; 
@@ -17,6 +17,9 @@ export default function Home() {
   const [myToken, setMyToken] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0); 
   
+  // Ref to track the last server time to prevent glitches
+  const lastServerTime = useRef<number | null>(null);
+
   // Form State
   const [showModal, setShowModal] = useState(false);
   const [isAddingMore, setIsAddingMore] = useState(false);
@@ -44,8 +47,18 @@ export default function Home() {
       const res = await fetch(`${API_URL}/queue/status`);
       const json = await res.json();
       setData(json);
-      const serverSeconds = json.total_wait_minutes * 60;
-      if (Math.abs(serverSeconds - timeLeft) > 5) setTimeLeft(serverSeconds);
+      
+      const serverTotalMinutes = json.total_wait_minutes;
+
+      // --- THE FIX ---
+      // Only reset the timer if the Server Time has actually CHANGED 
+      // (e.g., someone joined or left). 
+      // Otherwise, trust our local countdown.
+      if (lastServerTime.current !== serverTotalMinutes) {
+          setTimeLeft(serverTotalMinutes * 60);
+          lastServerTime.current = serverTotalMinutes;
+      }
+      
     } catch (e) { console.error("API Error"); }
   };
 
@@ -111,12 +124,10 @@ export default function Home() {
   const amIInQueue = data?.queue.some((c:any) => c.token === myToken);
 
   return (
-    // DARK THEME BACKGROUND
     <main className="min-h-screen bg-neutral-950 p-6 flex flex-col items-center font-sans text-gray-200">
       
       {/* --- STATUS CARD --- */}
       <div className="w-full max-w-md bg-neutral-900/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 mb-8 relative">
-        {/* Neon Top Border */}
         <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 shadow-[0_0_15px_rgba(74,222,128,0.5)]"></div>
         
         <div className="p-8 text-center">
@@ -124,7 +135,6 @@ export default function Home() {
           <p className="text-xs font-bold text-green-500 uppercase tracking-widest mb-8">Live Queue Status</p>
           
           <div className="relative inline-block">
-             {/* Glowing Timer Text */}
              <span className="text-7xl font-mono font-bold text-white tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
                 {formatTime(timeLeft)}
              </span>
