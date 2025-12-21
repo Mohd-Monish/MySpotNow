@@ -1,7 +1,6 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
-// --- CONFIG ---
 const API_URL = "https://myspotnow-api.onrender.com";
 
 export default function Admin() {
@@ -9,15 +8,16 @@ export default function Admin() {
   const [selected, setSelected] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
 
-  // Smart Timer Logic
-  const lastQueueTokens = useRef<string>("");
-
   // --- INITIAL LOAD ---
   useEffect(() => {
     refresh();
+    
+    // Poll Server every 3s
     const poller = setInterval(refresh, 3000);
+    
+    // Local Countdown (Visual only)
     const timer = setInterval(() => {
-        setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+        setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
     }, 1000);
 
     return () => { clearInterval(poller); clearInterval(timer); };
@@ -29,28 +29,26 @@ export default function Admin() {
         const json = await res.json();
         setData(json);
 
-        // Smart Timer Sync (Same as User App)
-        const currentTokens = json.queue.map((q: any) => q.token).join(",");
-        if (lastQueueTokens.current !== currentTokens) {
-            setTimeLeft(json.total_wait_minutes * 60);
-            lastQueueTokens.current = currentTokens;
+        // --- NEW TIMER LOGIC ---
+        // Sync directly with the Server's Master Clock
+        if (Math.abs(json.seconds_left - timeLeft) > 2) {
+            setTimeLeft(json.seconds_left);
         }
     } catch (e) { console.error("API Error"); }
   };
 
-  const handleNext = async () => {
-    await fetch(`${API_URL}/queue/next`, { method: "POST" });
-    refresh();
+  const handleNext = async () => { 
+      await fetch(`${API_URL}/queue/next`, { method: "POST" }); 
+      refresh(); 
   };
 
-  const handleReset = async () => {
-    if(confirm("⚠ WARNING: This will delete all customers and history. Continue?")) {
-        await fetch(`${API_URL}/queue/reset`, { method: "POST" });
-        refresh();
-    }
+  const handleReset = async () => { 
+      if(confirm("⚠ WARNING: This will delete everyone. Reset System?")) { 
+          await fetch(`${API_URL}/queue/reset`, { method: "POST" }); 
+          refresh(); 
+      }
   };
 
-  // Helper for HH:MM:SS
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
@@ -60,9 +58,8 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-neutral-950 text-gray-200 p-6 font-sans">
       
-      {/* --- TOP BAR: PERFORMANCE STATS --- */}
+      {/* PERFORMANCE CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {/* Card 1: Live Timer */}
           <div className="bg-neutral-900/50 border border-green-500/30 p-6 rounded-2xl flex items-center justify-between shadow-[0_0_20px_rgba(34,197,94,0.1)]">
               <div>
                   <p className="text-xs font-bold text-green-500 uppercase tracking-widest mb-1">Current Wait Time</p>
@@ -73,7 +70,6 @@ export default function Admin() {
               </div>
           </div>
 
-          {/* Card 2: People in Queue */}
           <div className="bg-neutral-900/50 border border-white/10 p-6 rounded-2xl flex items-center justify-between">
               <div>
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">In Queue</p>
@@ -84,15 +80,13 @@ export default function Admin() {
               </div>
           </div>
 
-          {/* Card 3: Daily Performance */}
           <div className="bg-neutral-900/50 border border-white/10 p-6 rounded-2xl flex items-center justify-between">
               <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Today's Performance</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Performance</p>
                   <div className="flex items-baseline gap-2">
                       <p className="text-4xl font-black text-white">{data?.daily_stats?.served || 0}</p>
                       <span className="text-sm text-gray-600">Customers</span>
                   </div>
-                  <p className="text-[10px] text-gray-600 mt-1">Total {data?.daily_stats?.minutes || 0} mins sold</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold">
                   📈
@@ -100,7 +94,7 @@ export default function Admin() {
           </div>
       </div>
 
-      {/* --- MAIN CONTROLS --- */}
+      {/* CONTROLS */}
       <div className="flex justify-between items-center mb-6">
          <h2 className="text-xl font-bold text-white">Queue Management</h2>
          <div className="flex gap-3">
@@ -117,7 +111,7 @@ export default function Admin() {
          </div>
       </div>
 
-      {/* --- QUEUE GRID --- */}
+      {/* QUEUE GRID */}
       <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
          {data?.queue.map((p: any, index: number) => (
              <div key={p.token} onClick={() => setSelected(p)}
@@ -127,7 +121,6 @@ export default function Admin() {
                         : 'bg-neutral-900 border-white/5 hover:border-white/20'}
                 `}
              >
-                {/* Background Pattern for Current Customer */}
                 {index === 0 && <div className="absolute top-0 right-0 p-3 opacity-10 text-6xl font-black">#1</div>}
 
                 <div className="flex justify-between items-start mb-4 relative z-10">
@@ -147,15 +140,14 @@ export default function Admin() {
          ))}
       </div>
 
-      {/* --- EMPTY STATE --- */}
+      {/* EMPTY STATE */}
       {data?.queue.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 bg-neutral-900/30 border-2 border-dashed border-neutral-800 rounded-3xl">
               <p className="font-bold text-xl text-gray-700">All Caught Up! 🎉</p>
-              <p className="text-sm text-gray-800">No customers waiting in line.</p>
           </div>
       )}
 
-      {/* --- DETAILS POPUP --- */}
+      {/* DETAILS POPUP */}
       {selected && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-neutral-900 border border-white/10 p-8 rounded-3xl w-full max-w-md relative animate-in fade-in zoom-in duration-200 shadow-2xl">

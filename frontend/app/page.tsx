@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 // --- CONFIG ---
 const API_URL = "https://myspotnow-api.onrender.com"; 
@@ -16,10 +16,7 @@ export default function Home() {
   const [myToken, setMyToken] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0); 
   
-  // REFS
-  const lastQueueTokens = useRef<string>("");
-
-  // Form State
+  // UI State
   const [showModal, setShowModal] = useState(false);
   const [isAddingMore, setIsAddingMore] = useState(false);
   const [name, setName] = useState("");
@@ -29,14 +26,18 @@ export default function Home() {
 
   // --- 1. INITIAL LOAD & TIMER ---
   useEffect(() => {
+    // Restore Session
     const savedToken = localStorage.getItem('slotSync_token');
     if (savedToken) setMyToken(parseInt(savedToken));
 
     fetchStatus();
+    
+    // Poll Server every 3s to stay in sync
     const poller = setInterval(fetchStatus, 3000);
     
+    // Local countdown (Visual only - makes it look smooth between polls)
     const timer = setInterval(() => {
-        setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+        setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
     }, 1000);
 
     return () => { clearInterval(poller); clearInterval(timer); };
@@ -48,37 +49,12 @@ export default function Home() {
       const json = await res.json();
       setData(json);
       
-      // --- ADVANCED TIMER LOGIC ---
-      // 1. Generate a unique ID for the current queue state
-      const currentTokens = json.queue.map((q: any) => q.token).join(",");
-
-      // 2. Check if the queue has physically changed (new person joined/left)
-      if (lastQueueTokens.current !== currentTokens) {
-          // QUEUE CHANGED: Reset timer based on new server time
-          const newSeconds = json.total_wait_minutes * 60;
-          setTimeLeft(newSeconds);
-          
-          // Save the "Target Finish Time" to storage for refreshes
-          const finishTime = Date.now() + (newSeconds * 1000);
-          localStorage.setItem('slotSync_finishTime', finishTime.toString());
-          localStorage.setItem('slotSync_queueHash', currentTokens);
-          
-          lastQueueTokens.current = currentTokens;
-      } else {
-          // QUEUE SAME: Check if we just refreshed the page
-          const savedFinishTime = localStorage.getItem('slotSync_finishTime');
-          const savedHash = localStorage.getItem('slotSync_queueHash');
-
-          // If we have a saved timer for THIS exact queue state, recover it
-          if (savedFinishTime && savedHash === currentTokens) {
-              const remaining = Math.floor((parseInt(savedFinishTime) - Date.now()) / 1000);
-              // Only sync if the difference is huge (fixing the drift)
-              if (Math.abs(timeLeft - remaining) > 2) {
-                  setTimeLeft(remaining > 0 ? remaining : 0);
-              }
-          }
+      // --- THE MASTER CLOCK SYNC ---
+      // We stop calculating time locally. We simply ask the server:
+      // "How many seconds are left?"
+      if (Math.abs(json.seconds_left - timeLeft) > 2) {
+          setTimeLeft(json.seconds_left);
       }
-      
     } catch (e) { console.error("API Error"); }
   };
 
@@ -100,21 +76,20 @@ export default function Home() {
     
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/queue/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, services: selected }),
-      });
-      const resData = await res.json();
-      
-      if (res.ok) {
-        localStorage.setItem('slotSync_token', resData.token.toString());
-        setMyToken(resData.token);
-        setShowModal(false);
-        fetchStatus();
-      } else {
-        alert("Error: " + (resData.detail?.[0]?.msg || "Failed to join"));
-      }
+        const res = await fetch(`${API_URL}/queue/join`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, phone, services: selected }),
+        });
+        
+        if (res.ok) {
+            const json = await res.json();
+            localStorage.setItem('slotSync_token', json.token.toString());
+            setMyToken(json.token);
+            setShowModal(false);
+            fetchStatus();
+        } else {
+            alert("Failed to join");
+        }
     } catch (err) { alert("Server Error"); }
     setLoading(false);
   };
@@ -125,8 +100,7 @@ export default function Home() {
     
     setLoading(true);
     await fetch(`${API_URL}/queue/add-service`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: myToken, new_services: selected }),
     });
     
@@ -136,7 +110,7 @@ export default function Home() {
     fetchStatus(); 
   };
 
-  // Helper to check if I already own a service
+  // Check current services to disable duplicates
   const myCurrentServices = data?.queue.find((q:any) => q.token === myToken)?.services || [];
 
   // --- 3. UI HELPERS ---
@@ -236,7 +210,7 @@ export default function Home() {
          })}
       </div>
 
-      {/* MODAL */}
+      {/* MODAL (JOIN & ADD) */}
       {(showModal || isAddingMore) && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
            <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in duration-200">
@@ -246,29 +220,33 @@ export default function Home() {
               </div>
               
               <div className="p-6 space-y-4">
+                 {/* Only show Inputs if NOT adding more */}
                  {!isAddingMore && (
                      <>
                         <input className="w-full p-4 bg-neutral-950 border border-white/10 rounded-xl font-medium text-white focus:border-green-500 outline-none" 
                             placeholder="Your Name" value={name} onChange={e=>setName(e.target.value)} />
                         
                         <input 
-                            type="tel" maxLength={10}
+                            type="tel" 
+                            maxLength={10}
                             className="w-full p-4 bg-neutral-950 border border-white/10 rounded-xl font-medium text-white focus:border-green-500 outline-none" 
-                            placeholder="Phone (10 digits)" value={phone} onChange={handlePhoneChange} 
+                            placeholder="Phone (10 digits)" 
+                            value={phone} 
+                            onChange={handlePhoneChange} 
                         />
                      </>
                  )}
 
                  <div className="grid grid-cols-2 gap-2">
                     {SERVICES.map(s => {
-                        // Check if I already have this service (only for Add More mode)
+                        // Check if I already own this service
                         const alreadyOwned = isAddingMore && myCurrentServices.includes(s.name);
                         
                         return (
                             <button 
                                 key={s.name} 
                                 type="button" 
-                                disabled={alreadyOwned} // DISABLE IF OWNED
+                                disabled={alreadyOwned} // DISABLED LOGIC
                                 onClick={() => toggleService(s.name)}
                                 className={`p-3 rounded-xl text-sm font-bold border transition-all 
                                     ${alreadyOwned 
