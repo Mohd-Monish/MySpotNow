@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react';
 
 // --- CONFIG ---
-const API_URL = "https://myspotnow-api.onrender.com"; // Your Render URL
+// Make sure this matches your deployed Backend URL
+const API_URL = "https://myspotnow-api.onrender.com"; 
+
 const SERVICES = [
   { name: "Haircut", time: 20 },
   { name: "Shave", time: 10 },
@@ -56,6 +58,16 @@ export default function Home() {
   };
 
   // --- 2. HANDLERS ---
+  
+  // NEW: Strict Phone Number Handler
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only allow numbers (0-9)
+    if (value === '' || /^\d+$/.test(value)) {
+      setPhone(value);
+    }
+  };
+
   const toggleService = (svc: string) => {
     if (selected.includes(svc)) setSelected(selected.filter(s => s !== svc));
     else setSelected([...selected, svc]);
@@ -202,8 +214,16 @@ export default function Home() {
                      <>
                         <input className="w-full p-4 bg-gray-50 border rounded-xl font-medium focus:ring-2 ring-blue-500 outline-none" 
                             placeholder="Your Name" value={name} onChange={e=>setName(e.target.value)} />
-                        <input className="w-full p-4 bg-gray-50 border rounded-xl font-medium focus:ring-2 ring-blue-500 outline-none" 
-                            type="number" placeholder="Phone (10 digits)" value={phone} onChange={e=>setPhone(e.target.value)} />
+                        
+                        {/* FIXED PHONE INPUT */}
+                        <input 
+                            type="tel" 
+                            maxLength={10}
+                            className="w-full p-4 bg-gray-50 border rounded-xl font-medium focus:ring-2 ring-blue-500 outline-none" 
+                            placeholder="Phone (10 digits)" 
+                            value={phone} 
+                            onChange={handlePhoneChange} 
+                        />
                      </>
                  )}
 
