@@ -36,7 +36,7 @@ export default function AdminPanel() {
       
       {/* Header */}
       <div className="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-        <h1 className="text-2xl font-bold text-blue-400">MySpotNow <span className="text-white text-sm font-normal">| Vendor Panel</span></h1>
+        <h1 className="text-2xl font-bold text-blue-400">SlotSync <span className="text-white text-sm font-normal">| Vendor Panel</span></h1>
         <div className="text-right">
           <p className="text-sm text-gray-400">Status</p>
           <p className="text-green-400 font-bold">● Online</p>
