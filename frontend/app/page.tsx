@@ -68,7 +68,9 @@ export default function Home() {
       if (Math.abs(json.total_wait_minutes * 60 - timeLeft) > 5) {
           setTimeLeft(json.total_wait_minutes * 60);
       }
-    } catch (err) console.error(err);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // --- HANDLER: TOGGLE SERVICES ---
