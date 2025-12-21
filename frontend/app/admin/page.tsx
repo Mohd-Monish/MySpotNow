@@ -50,7 +50,7 @@ export default function Admin() {
   // --- LOGIN ---
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "1234") setIsLocked(false);
+    if (password === "2568") setIsLocked(false);
     else { setError(true); setTimeout(() => setError(false), 500); setPassword(""); }
   };
 
