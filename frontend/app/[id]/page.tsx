@@ -49,10 +49,10 @@ export default function SalonHome() {
     return () => { clearInterval(poller); clearInterval(timer); };
   }, []);
 
-  const fetchStatus = async () => {
+ const fetchStatus = async () => {
     try {
-      // NOTE: In the future, we will send ?salon_id=${salonId} here
-      const res = await fetch(`${API_URL}/queue/status`);
+      // 👇 NEW: Passing the salonId from the URL
+      const res = await fetch(`${API_URL}/queue/status?salon_id=${salonId}`);
       const json = await res.json();
       setData(json);
     } catch (e) { console.error("API Error"); }
@@ -102,12 +102,18 @@ export default function SalonHome() {
       setLoading(false);
   };
 
-  const handleJoin = async () => {
+const handleJoin = async () => {
     if (selected.length === 0) return alert("Select a service");
     setLoading(true);
     await fetch(`${API_URL}/queue/join`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: currentUser.name, phone: currentUser.phone, services: selected }),
+        // 👇 NEW: Including salon_id in the body
+        body: JSON.stringify({ 
+            salon_id: salonId,  
+            name: currentUser.name, 
+            phone: currentUser.phone, 
+            services: selected 
+        }),
     });
     setLoading(false); setView("home"); setSelected([]); fetchStatus();
   };
