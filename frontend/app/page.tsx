@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 // 👇 YOUR RENDER LINK
 const API_URL = "https://myspotnow-api.onrender.com"; 
 
-const SERVICES = [ { name: "Haircut", time: 20 }, { name: "Shave", time: 10 }, { name: "Head Massage", time: 15 }, { name: "Facial", time: 30 } ];
+const SERVICES = [ { name: "Haircut", time: 20 }, { name: "Shave", time: 10 }, { name: "Head Massage", time: 15 }, { name: "Facial", time: 30 }, { name: "Hair Color", time: 45 }];
 
 export default function Home() {
   const [data, setData] = useState<any>(null);
@@ -16,6 +16,7 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showAddService, setShowAddService] = useState(false); // New modal state
 
   // --- SYNC ---
   useEffect(() => {
@@ -23,7 +24,6 @@ export default function Home() {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
     fetchStatus();
-    // Poll every 2 seconds for faster updates
     const poller = setInterval(fetchStatus, 2000); 
     return () => clearInterval(poller);
   }, []);
@@ -75,7 +75,21 @@ export default function Home() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: currentUser.name, phone: currentUser.phone, services: selected }),
     });
-    setLoading(false); setView("home"); fetchStatus();
+    setLoading(false); setView("home"); setSelected([]); fetchStatus();
+  };
+
+  const handleAddServices = async () => {
+      if (selected.length === 0) return alert("Select at least one service");
+      setLoading(true);
+      
+      const myItem = data?.queue.find((p:any) => p.phone === currentUser?.phone);
+      if(!myItem) return;
+
+      await fetch(`${API_URL}/queue/add-service`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: myItem.token, new_services: selected }),
+      });
+      setLoading(false); setShowAddService(false); setSelected([]); fetchStatus();
   };
 
   const handleCancel = async (token: number) => {
@@ -93,21 +107,18 @@ export default function Home() {
     else setSelected([...selected, svc]);
   };
 
-  const formatTime = (s: number) => {
+  // Safe time formatting
+  const formatTime = (s: any) => {
+    if (typeof s !== 'number' || isNaN(s)) return "0:00"; // Fix for NaN
     const mins = Math.floor(s / 60); const secs = s % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
   // --- DERIVED STATE ---
-  // Find my object in the queue list
   const myQueueItem = data?.queue.find((p:any) => p.phone === currentUser?.phone);
   const amIInQueue = !!myQueueItem;
-  
-  // Calculate people ahead: My index - 0 (serving index)
   const myIndex = data?.queue.findIndex((p:any) => p.phone === currentUser?.phone);
   const peopleAhead = myIndex > 0 ? myIndex : 0;
-  
-  // Am I serving now?
   const isServingNow = amIInQueue && myIndex === 0;
 
   return (
@@ -115,7 +126,6 @@ export default function Home() {
       
       <div className="w-full max-w-md bg-neutral-900/50 backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl relative overflow-hidden">
          
-         {/* HEADER */}
          <div className="flex justify-between items-center p-6 border-b border-white/5">
             <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">SlotSync</h1>
             {currentUser ? (
@@ -126,11 +136,8 @@ export default function Home() {
             ) : <button onClick={() => setView("login")} className="text-sm text-green-400 font-bold">Login</button>}
          </div>
 
-         {/* VIEW: HOME */}
          {view === "home" && (
              <div className="p-8 text-center">
-                 
-                 {/* 1. STATUS DISPLAY */}
                  {amIInQueue ? (
                      <>
                         {isServingNow ? (
@@ -158,23 +165,26 @@ export default function Home() {
                             </div>
                         )}
                         
-                        <button onClick={() => handleCancel(myQueueItem.token)} disabled={loading} className="text-sm text-red-500 hover:text-red-400 underline decoration-red-500/30">
-                            {loading ? "..." : "Cancel Booking"}
-                        </button>
+                        <div className="flex gap-2 justify-center mt-6">
+                             <button onClick={() => setShowAddService(true)} className="px-4 py-2 bg-blue-600/20 text-blue-400 text-sm font-bold rounded-lg hover:bg-blue-600 hover:text-white transition">
+                                 + Add Services
+                             </button>
+                             <button onClick={() => handleCancel(myQueueItem.token)} disabled={loading} className="px-4 py-2 bg-red-600/20 text-red-400 text-sm font-bold rounded-lg hover:bg-red-600 hover:text-white transition">
+                                 Cancel
+                             </button>
+                        </div>
                      </>
                  ) : (
                      <div className="mb-8">
                          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Current Queue</p>
                          <div className="text-5xl font-black text-white mb-2">{data?.people_ahead || 0}</div>
                          <p className="text-sm text-gray-400">People Waiting</p>
-                         
                          <button onClick={() => currentUser ? setView("join") : setView("login")} className="mt-6 w-full bg-green-500 text-black font-bold py-4 rounded-xl hover:bg-green-400 transition">
                              {currentUser ? "Book a Slot" : "Login to Book"}
                          </button>
                      </div>
                  )}
 
-                 {/* 5. QUEUE LIST (Next 5) */}
                  <div className="mt-8 pt-8 border-t border-white/5 text-left">
                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 pl-2">Up Next</h3>
                      <div className="space-y-2">
@@ -194,7 +204,25 @@ export default function Home() {
              </div>
          )}
 
-         {/* LOGIN / SIGNUP / JOIN VIEWS (Standard Forms) */}
+         {/* ADD SERVICE MODAL */}
+         {showAddService && (
+             <div className="absolute inset-0 bg-black/90 z-50 p-8 animate-in slide-in-from-bottom duration-300">
+                <h2 className="text-xl font-bold text-white mb-4">Add More Services</h2>
+                <div className="grid grid-cols-2 gap-2 mb-6">
+                    {SERVICES.map(s => (
+                        <button key={s.name} onClick={() => toggleService(s.name)} className={`p-3 rounded-xl text-sm font-bold border transition-all ${selected.includes(s.name) ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-gray-400 border-white/5'}`}>
+                            {s.name} <span className="block text-[10px] opacity-60 font-normal">{s.time}m</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={handleAddServices} disabled={loading} className="flex-1 bg-blue-500 text-white font-bold py-3 rounded-xl hover:bg-blue-400">Update</button>
+                    <button onClick={() => { setShowAddService(false); setSelected([]); }} className="flex-1 bg-neutral-800 text-white font-bold py-3 rounded-xl">Cancel</button>
+                </div>
+             </div>
+         )}
+
+         {/* LOGIN / SIGNUP / JOIN VIEWS */}
          {view === "login" && (
             <div className="p-8">
                 <h2 className="text-2xl font-bold text-white mb-6">Login</h2>

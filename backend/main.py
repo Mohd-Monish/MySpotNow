@@ -1,9 +1,9 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 from pymongo import MongoClient
 from passlib.context import CryptContext
 
@@ -56,6 +56,9 @@ class LoginRequest(BaseModel):
 class JoinRequest(BaseModel):
     name: str; phone: str; services: List[str]
 
+class AddServiceRequest(BaseModel):
+    token: int; new_services: List[str]
+
 class ActionRequest(BaseModel):
     token: int
 
@@ -69,45 +72,34 @@ class MoveRequest(BaseModel):
 
 @app.get("/queue/status")
 def get_status():
-    # 1. Get raw queue sorted by order
     queue_list = list(queue_col.find().sort("order_index", 1))
     
-    # 2. Calculate "Time Served" for the current person
     start_time = get_service_start_time()
     time_served_so_far = 0
     if queue_list and start_time:
         delta = datetime.now() - start_time
         time_served_so_far = max(0, delta.total_seconds())
     
-    # 3. Calculate INDIVIDUAL wait times for everyone
     cumulative_wait = 0
     
     for index, person in enumerate(queue_list):
-        person.pop("_id", None) # Clean ID
-        
-        # Duration of THIS person's service in seconds
+        person.pop("_id", None)
         person_duration_sec = person['total_duration'] * 60
         
         if index == 0:
-            # First person: Wait is (Duration - Time Served)
             remaining = max(0, person_duration_sec - time_served_so_far)
-            person['estimated_wait'] = 0 # They are serving now
+            person['estimated_wait'] = 0 
             person['time_remaining_in_service'] = int(remaining)
-            cumulative_wait = remaining # This is the wait for the NEXT person
+            cumulative_wait = remaining 
         else:
-            # Everyone else: Wait is the accumulative pile before them
             person['estimated_wait'] = int(cumulative_wait)
-            person['time_remaining_in_service'] = int(person_duration_sec)
             cumulative_wait += person_duration_sec
 
-    # 4. Total Shop Wait (Time until empty)
-    global_wait = cumulative_wait
-    
     return {
         "shop_status": "Open", 
         "people_ahead": len(queue_list),
         "queue": queue_list,
-        "seconds_left": int(global_wait) # For stats only
+        "seconds_left": int(cumulative_wait)
     }
 
 @app.post("/auth/signup")
@@ -157,22 +149,29 @@ def join_queue(req: JoinRequest):
     })
     return {"message": "Joined", "token": new_token}
 
+@app.post("/queue/add-service")
+def add_service(req: AddServiceRequest):
+    user = queue_col.find_one({"token": req.token})
+    if not user: raise HTTPException(404, "User not found")
+    
+    # Combine old services with new ones (avoid duplicates)
+    updated_services = list(set(user['services'] + req.new_services))
+    new_duration = sum(MENU.get(s, 0) for s in updated_services)
+    
+    queue_col.update_one(
+        {"token": req.token}, 
+        {"$set": {"services": updated_services, "total_duration": new_duration}}
+    )
+    return {"message": "Services updated"}
+
 @app.post("/queue/cancel")
 def cancel_booking(req: ActionRequest):
-    # Check if this person is currently being served (index 0)
-    user = queue_col.find_one({"token": req.token})
-    if not user: return {"message": "Not found"}
-    
-    # If we delete the first person, we must reset the timer for the next person
     first_person = queue_col.find_one(sort=[("order_index", 1)])
     if first_person and first_person["token"] == req.token:
-        set_service_start_time(datetime.now()) # Reset timer for next person
+        set_service_start_time(datetime.now()) 
 
     queue_col.delete_one({"token": req.token})
-    
-    # If queue is empty after delete
     if queue_col.count_documents({}) == 0: set_service_start_time(None)
-    
     return {"message": "Cancelled"}
 
 @app.post("/queue/next")
