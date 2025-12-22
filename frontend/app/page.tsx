@@ -157,7 +157,7 @@ export default function Home() {
           {/* LEFT SIDE - DESKTOP HERO */}
           <div className="hidden lg:flex flex-col space-y-8 animate-in slide-in-from-left-10 duration-1000 fade-in">
               <div className="w-32 h-32 bg-white/5 rounded-3xl backdrop-blur-xl border border-white/10 flex items-center justify-center shadow-2xl shadow-green-900/20 animate-bounce">
-                  <img src="public/logo_no-text.png" alt="SlotSync Logo" className="w-24 h-24 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]" />
+                  <img src="app/public/logo_no-text.png" alt="SlotSync Logo" className="w-24 h-24 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]" />
               </div>
               
               <h1 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-500 to-teal-600 tracking-tight animate-in slide-in-from-bottom-5 duration-1000 delay-100">
@@ -307,7 +307,7 @@ export default function Home() {
                 {view === "login" && (
                     <div className="p-8 md:p-10 relative z-10 h-full flex flex-col justify-center min-h-[500px] animate-in slide-in-from-right duration-500">
                         <div className="text-center mb-8">
-                            <img src="public/logo_no-text.png" alt="Logo" className="w-16 h-16 object-contain mx-auto mb-4 drop-shadow-lg" />
+                            <img src="app/public/logo_no-text.png" alt="Logo" className="w-16 h-16 object-contain mx-auto mb-4 drop-shadow-lg" />
                             <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
                             <p className="text-gray-500 text-sm">Enter your credentials to access</p>
                         </div>
