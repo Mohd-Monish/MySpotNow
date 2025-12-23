@@ -81,7 +81,7 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((salon, i) => (
-                <Link href={`/salon/${salon.id}`} key={salon.id} className="group h-full">
+                <Link href={`/booking/${salon.id}`} key={salon.id} className="group h-full">
                     <div className={`bg-neutral-900/40 border border-white/5 rounded-[2rem] p-6 hover:bg-white/5 hover:border-green-500/30 transition-all duration-300 relative overflow-hidden h-full flex flex-col animate-in zoom-in-50 fade-in fill-mode-backwards`} style={{animationDelay: `${i * 100}ms`}}>
                         
                         {/* Glow Effect */}
